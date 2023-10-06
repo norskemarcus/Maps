@@ -1,77 +1,135 @@
-// https://www.npmjs.com/package/react-native-maps
+// Maps: https://www.npmjs.com/package/react-native-maps
 // docs: https://docs.expo.dev/versions/latest/sdk/location/
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, onPress, query } from 'react-native';
-import MapView, {Marker, Callout, Circle} from 'react-native-maps'
-//import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+// Storage: npm install @react-native-firebase/storage
+// Firestore: npm install @react-native-firebase/firestore
+// npm install firebase
 
-import * as Location from 'expo-location'
 
-// key=API_KEY AIzaSyBkhhg94CvB3bV3ptmT5BphAPDQFYAgzuQ
+import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Image} from 'react-native';
+import MapView, {Marker} from 'react-native-maps'
+import * as Location from 'expo-location' // To use Location: expo install expo-location
+import * as ImagePicker from 'expo-image-picker'; // ImagePicker: npm install expo-image-picker
+import {app, db, storage} from './firebase/config';
+import { ref, uploadString, getDownloadURL } from '@react-native-firebase/storage';
+
+
 
 export default function App() {
+  const [markers, setMarkers] = useState([])
+  const [region, setRegion] = useState({
+      latitude: 55,
+      longitude: 12,
+      latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+    });
 
-  const [pin, setPin] = useState({ latitude: 55.6936, 
-    longitude: 12.5459, });
+  const mapView = useRef(null) // ref. til map view objektet
+  const locationSubscription = useRef(null) // når vi lukker appen, skal den ikke lytte mere
+  const [image, setImage] = useState(null);
+  const [imagePath, setImagePath] = useState(null);
+
+
+
+    useEffect(() => {
+      async function startListening () {
+      
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          alert("Ingen adgang til lokation")
+          return;
+        }
+        locationSubscription.current = await Location.watchPositionAsync({
+          distanceInterval: 100,
+          accuracy: Location.Accuracy.High
+        }, (lokation) => {
+          const newRegion = {
+            latitude: lokation.coords.latitude,
+            longitude: lokation.coords.longitude,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          }
+          setRegion(newRegion) // flytter kortet til den nye lokation
+          if(mapView.current){
+            mapView.current.animateToRegion(newRegion)
+          }
+        })
+       }
+       startListening()
+       return () => {
+        if(locationSubscription.current){
+          locationSubscription.current.remove()
+        }
+       }
+      }, []) // useEffect skal kun køres en enkelt
+
+
+  
+    
+
+    function addMarker(data){
+      const {latitude, longitude} = data.nativeEvent.coordinate
+      const newMarker = {
+        coordinate: {latitude, longitude},
+        key: data.timeStamp,
+        title: "Great place"
+      }
+      setMarkers([...markers, newMarker]) // spread operator, markers er de vi har i forvejen + newMarker
+    }
+
+
+
+    async function launchImagePicker(marker) {
+      
+      try {
+      
+      let picture =  await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      })
+
+      if(!picture.canceled){
+        setImagePath(picture.assets[0].uri)
+      } else {
+        alert('Image selection canceled or no image selected.');
+      }
+      } catch (error){
+        alert('Error picking an image:', error);
+      }
+    
+    } 
+
+
+
 
   return (
-    <View style={{ marginTop: 50, flex: 1 }}>
-    <MapView
-      style={{ flex: 1 }}
-      initialRegion={{
-        latitude: 55.6936, 
-    longitude: 12.5459,
-       
-        latitudeDelta: 0.0922, // Zoom level
-        longitudeDelta: 0.0421,
-      }}
+    <View style={styles.container}>
+      <MapView 
+      style={styles.map}
+      region={region}
+      onLongPress={addMarker}
       provider='google'
-    >
-      <Marker
-        coordinate={pin}
-        pinColor="black"
-        draggable={true}
-        onDragStart={(e) => {
-          console.log("Drag start", e.nativeEvent.coordinate) 
-        }}
-        onDragEnd={(e) => {
-         setPin({
-          latitude: e.nativeEvent.coordinate.latitude,
-          longitude: e.nativeEvent.coordinate.longitude
-         }) 
-        }}
       >
+        {markers.map(marker => (
+          <Marker
+            coordinate={marker.coordinate}
+            key={marker.key}
+            title={marker.title}
+            onPress={() => launchImagePicker(marker)}
+            />
+        ))}
+   
+       <Marker coordinate={region} title="I'm here" /> 
 
-          
-        <Callout>
-        <Text>I'm here</Text>
-      </Callout>
-      </Marker>
-      <Circle center={pin} 
-  radius={500}/>
-    </MapView>
-  </View>
+      </MapView>
+    
+       <Image style={styles.image} source={{uri:imagePath}}></Image>  
+    </View>
+    
   );
 }
 
-// latitude: 55.6936, // Meinungsgade 8, 2200 Nørrebro
-// longitude: 12.5459,
-
-//  latitude: 55.6761, // Copenhagen's latitude
-//         longitude: 12.5683, // Copenhagen's longitude
-
-{/* <GooglePlacesAutocomplete
-placeholder='Search'
-onPress={(data, details = null) => {
-  // 'details' is provided when fetchDetails = true
-  console.log(data, details);
-}}
-query={{
-  key: 'AIzaSyBkhhg94CvB3bV3ptmT5BphAPDQFYAgzuQ',
-  language: 'en',
-}}
-styles={autocompleteStyles} 
-/> */}
 
 
 const styles = StyleSheet.create({
@@ -79,20 +137,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   map: {
-    width: '100%',
-    height: '100%',
+    flex: 1,
   },
+  image: {
+    flex: 0.5
+  }
 });
 
-
-const autocompleteStyles = StyleSheet.create({
-  container: {
-    flex: 0,
-    position: "absolute",
-    width: "100%",
-    zIndex: 1, // Fixed the typo here (xIndex to zIndex)
-  },
-  listView: {
-    backgroundColor: "white",
-  },
-});
