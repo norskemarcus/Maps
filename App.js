@@ -6,12 +6,12 @@
 
 
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Image} from 'react-native';
+import { StyleSheet, View, Image, Button, Alert} from 'react-native';
 import MapView, {Marker} from 'react-native-maps'
 import * as Location from 'expo-location' // To use Location: expo install expo-location
 import * as ImagePicker from 'expo-image-picker'; // ImagePicker: npm install expo-image-picker
 import {app, db, storage} from './firebase/config';
-import { ref, uploadString, getDownloadURL } from '@react-native-firebase/storage';
+import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 
 
 
@@ -100,7 +100,17 @@ export default function App() {
     
     } 
 
+    async function uploadImage() {
+      const res = await fetch(imagePath) // ved hvor billedet er hen
+      const blob = await res.blob() // binary large object
+      const uniqueImageID = Date.now().toString();
+      const storageRef = ref(storage, 'maps_images/' + uniqueImageID); // Specify the folder path
+      uploadBytes(storageRef, blob).then((snapshot) => {
+        alert("Image upload")
+      })
 
+    
+    }
 
 
   return (
@@ -125,6 +135,9 @@ export default function App() {
       </MapView>
     
        <Image style={styles.image} source={{uri:imagePath}}></Image>  
+       <Button title="Upload" onPress={uploadImage}/>
+
+
     </View>
     
   );
@@ -143,4 +156,3 @@ const styles = StyleSheet.create({
     flex: 0.5
   }
 });
-
