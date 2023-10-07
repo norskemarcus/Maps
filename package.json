@@ -11,6 +11,9 @@
   "dependencies": {
     "@react-native-firebase/firestore": "^18.5.0",
     "@react-native-firebase/storage": "^18.5.0",
+    "@react-navigation/native": "^6.1.8",
+    "@react-navigation/native-stack": "^6.9.14",
+    "@react-navigation/stack": "^6.3.18",
     "expo": "^49.0.13",
     "expo-image-picker": "~14.3.2",
     "expo-location": "~16.1.0",
