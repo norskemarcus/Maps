@@ -1,23 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Button, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { app, database, storage } from '../firebase/config.jsx';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
-export default function PinDetailScreen({ route, navigation }) {
-  const { key } = route.params;
+
+
+
+
+export default function PinDetailScreen({ route }) {
+ 
   const [imagePath, setImagePath] = useState(null);
 
-  // You can fetch data for the pin based on the 'key' parameter
 
 
-  useEffect(() => {
-    // Fetch and set the imagePath from Firestore based on the route.params.key
-    // You can use Firebase or Firestore to retrieve the image URL here.
-    // For simplicity, I'm using a placeholder imagePath for demonstration purposes.
-    const placeholderImagePath = 'https://example.com/placeholder.jpg';
-    setImagePath(placeholderImagePath);
-  }, [route.params.key]);
-
-  
   // Der hvor man vælger et billede
   const launchImagePicker = async () => {
     try {
@@ -38,34 +35,53 @@ export default function PinDetailScreen({ route, navigation }) {
     }
   };
 
+  async function uploadImage() {
 
+    try {
 
-  // // Der hvor man vælger et billede
-  // async function launchImagePicker(marker) {
-  //   try {
-  //     let picture = await ImagePicker.launchImageLibraryAsync({
-  //       allowsEditing: true,
-  //       aspect: [4, 3],
-  //       quality: 1,
-  //     });
-  //     if (!picture.canceled) {
-  //       setImagePath(picture.assets[0].uri);
-  //     } else {
-  //       alert('Image selection canceled or no image selected.');
-  //     }
-  //   } catch (error) {
-  //     alert('Error picking an image:', error);
-  //   }
-  // }
+    const res = await fetch(imagePath);
+    const blob = await res.blob();
+    const uniqueImageID = Date.now().toString();
+    
+    const storageRef = ref(storage, 'maps_images/' + uniqueImageID);
+
+    // Upload the image to Firebase Storage
+    const snapshot = await uploadBytes(storageRef, blob);
+
+    // Get the download URL of the uploaded image
+    const imageURL = await getDownloadURL(snapshot.ref);
+
+    // Get the document ID (key) from route.params
+    const documentId = route.params.key;
+
+    // Reference the specific document you want to update
+    const docRef = doc(database, 'markers', documentId);
+
+    await updateDoc(docRef, {
+      imageURL: imageURL,
+  });
+
+    alert("Image upload successful");
+
+  }catch (error) {
+    console.error("Error uploading image:", error);
+  }  
+  }
+
+  // Delete picture
+    //   const docRef = doc(databse, 'markers', key);
+     // await deleteDoc(docRef);
+
 
 
 
   return (
     <View>
       <Text>Info about place</Text>
-      <Image style={{ width: 200, height: 200 }} source={{ uri: imagePath }} />
+      <Image style={{ width: 400, height: 400 }} source={{ uri: imagePath }} />
       <Button title="Add picture" onPress={launchImagePicker} />
-      <Button title="Delelte picture" onPress={launchImagePicker} />
+      <Button title="Upload" onPress={uploadImage} />
+      <Button title="Delete picture" onPress={launchImagePicker} />
 
     </View>
   );

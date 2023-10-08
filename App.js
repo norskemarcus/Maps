@@ -4,7 +4,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import PinDetailScreen from './components/PinDetailScreen.js';
-import MainPage from './MainPage.js';
+import MainPage from './components/MainPage.js';
 
 const Stack = createNativeStackNavigator();
 
