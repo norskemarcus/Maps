@@ -1,17 +1,26 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Image, Button, Alert } from 'react-native';
+import { StyleSheet, View, Text, Image, Button, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { app, database, storage } from '../firebase/config.jsx';
-import { addDoc, doc, collection, GeoPoint, updateDoc } from 'firebase/firestore';
+import { addDoc, doc, collection, GeoPoint, updateDoc, documentId } from 'firebase/firestore';
+import axios from 'axios';
+import * as Google from 'expo-auth-session/providers/google'
 
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 // import { NavigationContainer } from '@react-navigation/native';
 // import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+// environmental variables in React Native using react-native-config:
+// npm install react-native-config --save
 
 export default function MainPage() {
+
+  const iosGoogleClientID = Config.IOS_GOOGLE_CLIENT_ID;
+  const androidGoogleClientID = Config.ANDROID_GOOGLE_CLIENT_ID;
+
+
   const [markers, setMarkers] = useState([]);
   const [region, setRegion] = useState({
     latitude: 55,
@@ -26,6 +35,22 @@ export default function MainPage() {
  // const [showMap, setShowMap] = useState(true);
   const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
   const [key, setKey] = useState(null);
+
+  const API_KEY = Config.API_KEY;
+  const SIGN_IN_URL = Config.SIGN_IN_URL
+  const [accessToken, setAccessToken] = useState(null)
+
+  
+  const[request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: androidGoogleClientID
+  });
+
+  useEffect(() => {
+    if(response?.type=== "success"){
+      setAccessToken(response.authentication.accessToken)
+     // console.log("Tilbage fra Google", response.authentication.accessToken)
+    }
+  }, [response])
 
 
 
@@ -61,6 +86,40 @@ export default function MainPage() {
       }
     };
   }, []);
+
+
+
+
+  async function login() {
+ 
+    try {
+      const response = await axios.post(url + API_KEY, {
+        email: "test@norge.no",
+        password: "test1234",
+        returnSecureToken: true
+      });
+    
+      if (response.status === 200 && response.data) {
+       
+        alert("Logget ind");
+      } else {
+        alert("Log-in failed. Please check your credentials.");
+      }
+    } catch (error) {
+      console.error("Error logging in:", error);
+      alert("Log-in failed. Please check your network connection.");
+    }
+  }
+ 
+
+  async function getUserData() {
+
+   let userInfoResponse = 
+   await fetch("https://www.googleapis.com/userinfo/v2/me", {
+
+   headers: { Authorization: `Bearer ${accessToken}`}
+   })
+  }
 
 
   async function addMarker(data) {
@@ -112,57 +171,59 @@ export default function MainPage() {
       } catch (error) {
         alert('Error picking an image:', error);
       }
+      console.log("ImagePath inside launchImagePicker", imagePath);
     };
   
 
     async function uploadImage() {
-
       try {
         if (!imagePath) {
           alert('Please select an image before uploading.');
           return;
         }
     
-      const res = await fetch(imagePath);
-      const blob = await res.blob();
-      const uniqueImageID = Date.now().toString();
-      const fileName = uniqueImageID + '.jpg';
-      const storageRef = ref(storage, 'map_images/' + fileName); 
-      console.log(storageRef);
-
-      const uploadTask = uploadBytesResumable(storageRef, blob);
-     
-      // Upload the image to Firebase Storage
-      // const snapshot = await uploadBytes(storageRef, blob).then((snapshot) => {
-      //   alert("Image upload successful");
-      // });
-  
-      // Get the download URL of the uploaded image
-      const downloadURL = await getDownloadURL(storageRef);
-      console.log(downloadURL);
-
-    // For now, you can simply log the imageURL:
-      console.log('Image URL:', imageURL);
-
-      const documentId = selectedMarkerKey;
-  
-      // Reference the specific document you want to update
-      const docRef = doc(database, 'markers', documentId);
-
-  
-      await updateDoc(docRef, {
-        imageURL: downloadURL,
-    });
-  
-      // You can also set the imagePath back to null to clear the selected image
-      setImagePath(null);
-
-      
-  
-    }catch (error) {
-      console.error("Error uploading image:", error);
-    }  
+        // Fetch the image from the selected path
+        const res = await fetch(imagePath);
+        const blob = await res.blob();
+        const uniqueImageID = Date.now().toString();
+        const fileName = `${uniqueImageID}.jpg`;
+        const storageRef = ref(storage, `map_images/${fileName}`);
+    
+        // Upload the image to Firebase Storage
+        const uploadTask = uploadBytes(storageRef, blob);
+    
+        uploadTask.then(async (snapshot) => {
+          // Get the download URL of the uploaded image
+          const downloadURL = await getDownloadURL(storageRef);
+    
+          // Update the document's data with the image URL
+          const documentId = selectedMarkerKey; // key from newMarker
+          const docRef = doc(database, 'markers', documentId);
+    
+          const documentData = {
+            imageURL: downloadURL,
+          };
+    
+          // Reference the specific document you want to update
+          await updateDoc(docRef, documentData);
+    
+          // Reset the imagePath to clear the selected image
+          setImagePath(null);
+    
+          console.log('Image uploaded successfully and URL updated.');
+        });
+    
+        uploadTask.catch((error) => {
+          console.error('Error uploading image:', error);
+          // Handle the error as needed
+        });
+      } catch (error) {
+        console.error(error);
+        // Handle the error as needed
+      }
     }
+    
+
   
     function onMarkerPressed(key) {
       setKey(key);
@@ -174,12 +235,23 @@ export default function MainPage() {
 
   return (
     <View style={styles.container}>
+         <View>
+   {/*    <Button 
+      title='Log in'
+      onPress={login}
+      /> */}
+       <Button 
+      title='Google login'
+      onPress={() => promptAsync()}
+      />
+    </View>
         <MapView
           style={styles.map}
           region={region}
           onLongPress={addMarker}
           provider='google'
         >
+          
           {markers.map((marker) => ( // tager en marker af gangen
             <Marker // returnerer en ny Marker
               coordinate={marker.coordinate}
@@ -190,7 +262,10 @@ export default function MainPage() {
           ))}
 
           <Marker coordinate={region} title="I'm here" />
+       
+   
         </MapView>
+
         <View style={styles.imageContainer}>
           <Image style={styles.image} source={{ uri: imagePath }} />
           <View style={styles.buttonContainer}>
