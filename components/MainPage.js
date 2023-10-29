@@ -1,21 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, Image, Button, Alert } from 'react-native';
+import { StyleSheet, View, Text, Image, Button, Alert, ActivityIndicator } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { app, database, storage } from '../firebase/config.jsx';
-import { addDoc, forEach, onSnapshot, doc, collection, GeoPoint, updateDoc, documentId } from 'firebase/firestore';
-import axios from 'axios';
-import * as Google from 'expo-auth-session/providers/google'
-import Config from 'react-native-config';
- import { useRoute } from '@react-navigation/native';
-
+import { addDoc, onSnapshot, doc, collection, GeoPoint } from 'firebase/firestore';
+// import * as Google from 'expo-auth-session/providers/google'
+// import Config from 'react-native-config';
+import { useRoute } from '@react-navigation/native';
+import { signOut } from 'firebase/auth';
 import { ref, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
+import { auth } from './LoginPage.js'
 
-export default function MainPage({}) {
-  const route = useRoute(); 
-  const userId = route.params?.userId;
 
+export default function MainPage({ navigation }) {
   const [markers, setMarkers] = useState([]);
   const [region, setRegion] = useState({
     latitude: 55,
@@ -24,20 +22,22 @@ export default function MainPage({}) {
     longitudeDelta: 0.0421,
   });
 
+  const [currentMarker, setCurrentMarker] = useState({})
+  const [uploadImagePath, setUploadImagePath] = useState()
+  const [isUploading, setIsUploading] = useState(false); 
+  const [selectedMarker, setSelectedMarker] = useState(null);
+
+  const route = useRoute(); 
+  const { userId } = route.params?.userId;
+  //const { userId, auth } = route.params;
+
   const mapView = useRef(null);
   const locationSubscription = useRef(null);
   const [imagePath, setImagePath] = useState(null);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [selectedMarkerImage, setSelectedMarkerImage] = useState(null); 
-  const [selectedMarkerKey, setSelectedMarkerKey] = useState(null);
-  const [currentMarker, setCurrentMarker] = useState({})
-  const [key, setKey] = useState(null);
-  const [imageID, setImageID] = useState(null);
-  const [uploadImagePath, setUploadImagePath] = useState()
-
+  
+  
 
   useEffect(() => {
-    // Query the Firestore collection for the current user
     const userCollectionPath = `${userId}`;
     const markersRef = collection(database, userCollectionPath);
   
@@ -54,7 +54,7 @@ export default function MainPage({}) {
             longitude: markerData.location.longitude,
           },
           title: markerData.title,
-          // You may need to handle imageURL as well
+         
         };
         updatedMarkers.push(marker);
       });
@@ -68,8 +68,6 @@ export default function MainPage({}) {
       unsubscribe();
     };
   }, [userId]);
-
-
 
 
 
@@ -106,49 +104,52 @@ export default function MainPage({}) {
     };
   }, []);
 
-
   async function addMarker(data) {
     const { latitude, longitude } = data.nativeEvent.coordinate;
+
     const newMarker = {
       coordinate: { latitude, longitude },
-      key: data.timeStamp,
+      key: data.timeStamp, 
       title: "Great place",
       imagePath: null,
     };
-    setMarkers([...markers, newMarker]);
-    setCurrentMarker(newMarker); 
-
-    await launchImagePicker();
-  }
-
-
-  async function addMarkerToDatabase(){
-
   
-    const { latitude, longitude } = currentMarker.coordinate;
-    const geoPoint = new GeoPoint(latitude, longitude);
 
-    try{
-
-         const userCollectionPath = `${userId}`;
-
-        await addDoc(collection(database, userCollectionPath), {
-          title: "Har jeg fået en ny collection nu?!",
-          imageURL: null,
-          key: currentMarker.key, 
-          location: geoPoint,
-       
-      });
-
-      console.log('currentMarker.key:', currentMarker.key)
+    if (data.timeStamp) {
+      await saveMarkerToDatabase(newMarker);
+      setMarkers([...markers, newMarker]);
+      setCurrentMarker(newMarker);
   
-    } catch (error){
-      console.log(error)
+  
+      await launchImagePicker();
+    } else {
+      alert('Timestamp is missing, marker not added.');
     }
   }
 
+  async function saveMarkerToDatabase(marker) {
+    const { latitude, longitude } = marker.coordinate;
+    const geoPoint = new GeoPoint(latitude, longitude);
+  
+    try {
+      const userCollectionPath = `${userId}`; // markers
+      await addDoc(collection(database, userCollectionPath), {
+        title: "TEST 23.10.23",
+        imageURL: null,
+        key: currentMarker.key,
+        location: geoPoint,
+      });
+  
+      console.log('currentMarker.key:', currentMarker.key)
+    } catch (error) {
+      console.log(error);
+    }
+  }
+  
 
-    async function launchImagePicker  () {
+
+
+    async function launchImagePicker () {
 
       try {
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -160,8 +161,7 @@ export default function MainPage({}) {
 
         if (!result.canceled) {
           setUploadImagePath(result.assets[0].uri)
-          addMarkerToDatabase()
-    
+
         } else {
           alert('Image selection canceled or no image selected.');
         }
@@ -174,16 +174,8 @@ export default function MainPage({}) {
 
     async function uploadImage() {
       try {
-        if (!currentMarker || !currentMarker.key) {
-       //   alert('Please add a marker before uploading an image.');
-          return;
-        }
-
-        if (!uploadImagePath) {
-          alert('Please select an image before uploading.');
-          return;
-        }
-        
+     
+        setIsUploading(true);
         const res = await fetch(uploadImagePath);
         const blob = await res.blob();
         const storageRef = ref(storage, `map_images/${userId}/${currentMarker.key}.jpg`);
@@ -193,66 +185,48 @@ export default function MainPage({}) {
 
       
         uploadTask.then((snapshot) => {
+          setIsUploading(false);
           alert("Image uploaded successfully");
 
         }).catch((error) => {
-          console.error('Error uploading image:', error);
+          setIsUploading(false);
+          alert('Error uploading image:', error);
         });
 
     } catch (error) {
+      setIsUploading(false);
       console.error(error);
     }
   }
     
 
-
-    // Daniel B sin kode:
-    async function downloadImage(key){
-      await getDownloadURL(ref(storage, `map_images/${key}.jpg`))
+  async function downloadImage(key) {
+    await getDownloadURL(ref(storage, `map_images/${userId}/${key}.jpg`)) // currentMarker.key?
       .then((url) => {
-        setImagePath(url)
+        const updatedMarkers = [...markers];
+        const markerIndex = updatedMarkers.findIndex((marker) => marker.key === key);
+  
+        if (markerIndex !== -1) {
+          updatedMarkers[markerIndex].imagePath = url;
+          setMarkers(updatedMarkers);
+        }
       })
       .catch((err) => {
-        alert(err)
-      })
-    }
-   
-
+        alert(err);
+      });
+  }
   
-    // function onMarkerPressed(key) {
-    //   if (key) {
-    //     setKey(key);
-    //     launchImagePicker();
-    //   } else {
-    //     // Handle the case where key is not available
-    //     console.error('Key is not available for the marker.');
-    //   }
-    // }
 
-
-  // function logout(){
-
-  //   if (accessToken){
-  //     setAccessToken(null);
-  //     alert("You are logged out")
-  //   } else {
-  //     alert("You are not logged in.")
-  //   }
-    
-  // }
+    async function logout(){
+      await signOut(auth)
+      navigation.navigate('LoginPage');
+    }
 
 
   return (
     <View style={styles.container}>
          <View>
-      {/* <Button 
-      title='Log out'
-      onPress={() => logout}
-      /> */}
-       {/* <Button 
-      title='Google login'
-      onPress={() => promptAsync()}
-      /> */}
+
     </View>
         <MapView
           style={styles.map}
@@ -266,26 +240,58 @@ export default function MainPage({}) {
               coordinate={marker.coordinate}
               key={marker.key}
               title={marker.title}
-              onPress={() => downloadImage(marker.key)}
+              onPress={() => {
+                setSelectedMarker(marker);
+                if (!marker.imagePath) {
+                  downloadImage(marker.key);
+                }
+              }}
             />
           ))}
-
-          <Marker coordinate={region} title="I'm here" />
-       
-   
+            <Marker coordinate={region} title="I'm here" />
         </MapView>
-
+    
+    
         <View style={styles.imageContainer}>
-          <Image style={styles.image} source={{ uri: uploadImagePath }} />
+        {selectedMarker && (
+          <Image style={styles.image} source={{ uri: selectedMarker.imagePath }} />
+        )}
+        {isUploading && (
+          <View style={styles.uploadingOverlay}>
+            <ActivityIndicator size="large" color="#0000ff" />
+            <Text>Uploading...</Text>
+          </View>
+        )}
+        <View style={styles.buttonContainer}>
+          {selectedMarker && (
+            <Button title="Upload" onPress={uploadImage} />
+          )}
+          <Button title="Sign out" onPress={logout} />
+
+         {/* {
+         uploadImagePath && currentMarker && currentMarker.key && 
+         (<Image style={styles.image} source={{ uri: uploadImagePath }} />)
+          }
+          {isUploading && (
+          <View style={styles.uploadingOverlay}>
+            <ActivityIndicator size="large" color="#0000ff" />
+            <Text>Uploading...</Text>
+          </View>
+        )}
      
           <View style={styles.buttonContainer}>
-          <Button title="Upload" onPress={uploadImage} />
+            { uploadImagePath &&
+              <>
+                <Button title="Upload" onPress={uploadImage} />
+              </>
+            }
+        
+          <Button title="Sign out" onPress={logout} /> */}
       </View>
-      </View>
+    </View>
   </View>
 );
-
-    }
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -314,7 +320,20 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+    justifyContent: 'space-around',
+    flexDirection: 'row'
   },
+  uploadingOverlay: {
+    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // Add a semi-transparent white background
+  }  
 });
 
 

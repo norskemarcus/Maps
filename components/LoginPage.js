@@ -4,72 +4,108 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { app, database, storage } from '../firebase/config.jsx';
-import { addDoc, doc, collection, GeoPoint, updateDoc, documentId } from 'firebase/firestore';
-import axios from 'axios';
+//import { addDoc, doc, collection, GeoPoint, updateDoc, documentId } from 'firebase/firestore';
+
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, createUserWithEmailAndPassword } from 'firebase/auth';
+
+
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+//import AsyncStorage from '@react-native-async-storage/async-storage';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+
+
+// web
+// device eller emulator
+
+let auth;
+
+if(Platform.OS === 'web'){
+  auth = getAuth(app)
+} else {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+  })
+}
+
+
+// Initialize Firebase Auth with ReactNativeAsyncStorage
+//  auth = initializeAuth(app, {
+//   persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+// });
+// npm install @react-native-async-storage/async-storage
 
 
 
 export default function LoginPage({ navigation }) {
-
-  const API_KEY = "AIzaSyA7txWcuaoBoYcSpqTf4l3nKfiiV0C1BYs";
-  const SIGN_IN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key="
+  
   const [enteredEmail, setEnteredEmail] = useState("ola.nordmand@norge.no")
   const [enteredPassword, setEnteredPassword] = useState("test1234")
   const [accessToken, setAccessToken] = useState(null);
   const [userId, setUserId] = useState(null);
 
 
+  useEffect(() => {
+    const auth_ = getAuth()
+    const unsubscribe = onAuthStateChanged(auth_, (currentUser) => {
+      if(currentUser){
+        setUserId(currentUser.uid)
+      } else {
+        setUserId(null);
+      }
+    })
+    return () => unsubscribe() // kaldes når componenten unmountes
+  }, [])
+
   
   async function login() {
- 
-    try {
-      const response = await axios.post(SIGN_IN_URL + API_KEY, {
-        email: enteredEmail,
-        password: enteredPassword,
-        returnSecureToken: true
-      });
-    
-      if (response.status === 200 && response.data) {
-       
-        console.log("Logget ind som: \n\n" + enteredEmail);
-        console.log('localId = User UID authentication firebase:', response.data.localId);
-        setAccessToken(response.data.idToken);
-        setUserId(response.data.localId);
-        navigation.navigate('MainPage', { userId: response.data.localId });
 
-      } else {
-        alert("Error logging in:", error.response.data.error.errors[0].message);
-    
-      }
-    } catch (error) {
-      alert("Error logging in:", error.response.data.error.errors[0].message);
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, enteredEmail, enteredPassword);
+        const user = userCredential.user; // Access the user object
+        const localId = user.uid; // Get the localId (UID) of the authenticated
+        console.log("Logged in as:", enteredEmail);
+        console.log('LocalId (UID) of the authenticated user:', localId);
+        setAccessToken(userCredential.user.idToken);
+        setUserId(localId);
+        navigation.navigate('MainPage', { userId: localId});
+
+     
+      } catch (error) {
+      alert("Error logging in:", error.userCredential.data.error.errors[0].message);
    
     }
+ 
   }
 
- // token = response.data.idToken
 
 
-  function logout(){
+  async function signUp(){
 
-    if (accessToken){
-      setAccessToken(null);
-      alert("You are logged out")
-    } else {
-      alert("You are not logged in.")
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, enteredEmail, enteredPassword)
+      console.log("Oprettet ny bruger", userCredential.user.uid)
+
+      const user = userCredential.user; 
+      const localId = user.uid; 
+
+      navigation.navigate('MainPage', { userId: localId, auth });
+
+    } catch (error){
+      console.log(error)
     }
-    
+
+  
   }
 
 
-  async function getUserData() {
+  // async function getUserData() {
 
-   let userInfoResponse = 
-   await fetch("https://www.googleapis.com/userinfo/v2/me", {
+  //  let userInfoResponse = 
+  //  await fetch("https://www.googleapis.com/userinfo/v2/me", {
 
-   headers: { Authorization: `Bearer ${accessToken}`}
-   })
-  }
+  //  headers: { Authorization: `Bearer ${accessToken}`}
+  //  })
+  // }
 
 
   return (
@@ -91,8 +127,8 @@ export default function LoginPage({ navigation }) {
       <Pressable style={styles.loginButton} onPress={login}>
         <Text style={styles.buttonText}>Login</Text>
       </Pressable>
-      <Pressable style={styles.logoutButton} onPress={logout}>
-        <Text style={styles.buttonText}>Log out</Text>
+      <Pressable style={styles.signupButton} onPress={signUp}>
+        <Text style={styles.buttonText}>Sign up</Text>
       </Pressable>
     </View>
   );
@@ -127,7 +163,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  logoutButton: {
+  signupButton: {
     backgroundColor: '#ffad33',
     width: '100%',
     borderRadius: 5,
@@ -140,3 +176,4 @@ const styles = StyleSheet.create({
   },
 });
 
+export { auth }
