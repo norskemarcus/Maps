@@ -1,12 +1,12 @@
 import { initializeApp } from 'firebase/app'; // npm install firebase
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-
+import {API_KEY} from "@env"
 
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyA7txWcuaoBoYcSpqTf4l3nKfiiV0C1BYs",
+  apiKey: API_KEY,
   authDomain: "notebook-32257.firebaseapp.com",
   projectId: "notebook-32257",
   storageBucket: "notebook-32257.appspot.com",
